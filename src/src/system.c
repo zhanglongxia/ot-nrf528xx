@@ -36,6 +36,7 @@
 #include <openthread/config.h>
 
 #include <openthread/platform/logging.h>
+#include <openthread/tasklet.h>
 
 #include "openthread-system.h"
 #include "platform-fem.h"
@@ -136,12 +137,26 @@ bool otSysPseudoResetWasRequested(void)
     return gPlatformPseudoResetWasRequested;
 }
 
+void nrf5TryToEnterLowPowerMode(otInstance *aInstance)
+{
+    if (!otTaskletsArePending(aInstance))
+    {
+        // Clear the internal event register.
+        __SEV();
+        __WFE();
+
+        // Enter low power mode, wait for an event.
+        __WFE();
+    }
+}
+
 void otSysProcessDrivers(otInstance *aInstance)
 {
     nrf5RadioProcess(aInstance);
     nrf5TransportProcess();
     nrf5TempProcess();
     nrf5AlarmProcess(aInstance);
+    nrf5TryToEnterLowPowerMode(aInstance);
 }
 
 __WEAK void otSysEventSignalPending(void)
