@@ -59,7 +59,7 @@ typedef enum
 struct PlatformDiagCommand
 {
     const char *mName;
-    otError (*mCommand)(otInstance *aInstance, uint8_t aArgsLength, char *aArgs[]);
+    otError (*mCommand)(otInstance *aInstance, uint8_t aArgsLength, char *aArgs[], char *aOutput, size_t aOutputMaxLen);
 };
 
 struct PlatformDiagMessage
@@ -88,9 +88,6 @@ static struct PlatformDiagMessage sDiagMessage      = {.mMessageDescriptor = "Di
                                                        .mID                = 0,
                                                        .mCnt               = 0};
 
-static otPlatDiagOutputCallback sDiagOutputCallback  = NULL;
-static void                    *sDiagCallbackContext = NULL;
-
 static otError parseLong(char *aArgs, long *aValue)
 {
     char *endptr;
@@ -98,25 +95,11 @@ static otError parseLong(char *aArgs, long *aValue)
     return (*endptr == '\0') ? OT_ERROR_NONE : OT_ERROR_PARSE;
 }
 
-static void diagOutput(const char *aFormat, ...)
-{
-    va_list args;
-
-    va_start(args, aFormat);
-
-    if (sDiagOutputCallback != NULL)
-    {
-        sDiagOutputCallback(aFormat, args, sDiagCallbackContext);
-    }
-
-    va_end(args);
-}
-
-static void appendErrorResult(otError aError)
+static void appendErrorResult(otError aError, char *aOutput, size_t aOutputMaxLen)
 {
     if (aError != OT_ERROR_NONE)
     {
-        diagOutput("failed\r\nstatus %#x\r\n", aError);
+        snprintf(aOutput, aOutputMaxLen, "failed\r\nstatus %#x\r\n", aError);
     }
 }
 
@@ -128,7 +111,11 @@ static bool startCarrierTransmision(void)
     return nrf_802154_continuous_carrier();
 }
 
-static otError processListen(otInstance *aInstance, uint8_t aArgsLength, char *aArgs[])
+static otError processListen(otInstance *aInstance,
+                             uint8_t     aArgsLength,
+                             char       *aArgs[],
+                             char       *aOutput,
+                             size_t      aOutputMaxLen)
 {
     OT_UNUSED_VARIABLE(aInstance);
 
@@ -138,7 +125,7 @@ static otError processListen(otInstance *aInstance, uint8_t aArgsLength, char *a
 
     if (aArgsLength == 0)
     {
-        diagOutput("listen: %s\r\n", sListen == true ? "yes" : "no");
+        snprintf(aOutput, aOutputMaxLen, "listen: %s\r\n", sListen == true ? "yes" : "no");
     }
     else
     {
@@ -147,15 +134,16 @@ static otError processListen(otInstance *aInstance, uint8_t aArgsLength, char *a
         error = parseLong(aArgs[0], &value);
         otEXPECT(error == OT_ERROR_NONE);
         sListen = (bool)(value);
-        diagOutput("set listen to %s\r\nstatus 0x%02x\r\n", sListen == true ? "yes" : "no", error);
+        snprintf(aOutput, aOutputMaxLen, "set listen to %s\r\nstatus 0x%02x\r\n", sListen == true ? "yes" : "no",
+                 error);
     }
 
 exit:
-    appendErrorResult(error);
+    appendErrorResult(error, aOutput, aOutputMaxLen);
     return error;
 }
 
-static otError processID(otInstance *aInstance, uint8_t aArgsLength, char *aArgs[])
+static otError processID(otInstance *aInstance, uint8_t aArgsLength, char *aArgs[], char *aOutput, size_t aOutputMaxLen)
 {
     OT_UNUSED_VARIABLE(aInstance);
 
@@ -165,7 +153,7 @@ static otError processID(otInstance *aInstance, uint8_t aArgsLength, char *aArgs
 
     if (aArgsLength == 0)
     {
-        diagOutput("ID: %" PRId16 "\r\n", sID);
+        snprintf(aOutput, aOutputMaxLen, "ID: %" PRId16 "\r\n", sID);
     }
     else
     {
@@ -175,15 +163,19 @@ static otError processID(otInstance *aInstance, uint8_t aArgsLength, char *aArgs
         otEXPECT(error == OT_ERROR_NONE);
         otEXPECT_ACTION(value >= 0, error = OT_ERROR_INVALID_ARGS);
         sID = (int16_t)(value);
-        diagOutput("set ID to %" PRId16 "\r\nstatus 0x%02x\r\n", sID, error);
+        snprintf(aOutput, aOutputMaxLen, "set ID to %" PRId16 "\r\nstatus 0x%02x\r\n", sID, error);
     }
 
 exit:
-    appendErrorResult(error);
+    appendErrorResult(error, aOutput, aOutputMaxLen);
     return error;
 }
 
-static otError processTransmit(otInstance *aInstance, uint8_t aArgsLength, char *aArgs[])
+static otError processTransmit(otInstance *aInstance,
+                               uint8_t     aArgsLength,
+                               char       *aArgs[],
+                               char       *aOutput,
+                               size_t      aOutputMaxLen)
 {
     otError error = OT_ERROR_NONE;
 
@@ -191,16 +183,16 @@ static otError processTransmit(otInstance *aInstance, uint8_t aArgsLength, char 
 
     if (aArgsLength == 0)
     {
-        diagOutput("transmit will send %" PRId32 " diagnostic messages with %" PRIu32
-                   " ms interval\r\nstatus 0x%02x\r\n",
-                   sTxRequestedCount, sTxPeriod, error);
+        snprintf(aOutput, aOutputMaxLen,
+                 "transmit will send %" PRId32 " diagnostic messages with %" PRIu32 " ms interval\r\nstatus 0x%02x\r\n",
+                 sTxRequestedCount, sTxPeriod, error);
     }
     else if (strcmp(aArgs[0], "stop") == 0)
     {
         otEXPECT_ACTION(sTransmitMode != kDiagTransmitModeIdle, error = OT_ERROR_INVALID_STATE);
 
         otPlatAlarmMilliStop(aInstance);
-        diagOutput("diagnostic message transmission is stopped\r\nstatus 0x%02x\r\n", error);
+        snprintf(aOutput, aOutputMaxLen, "diagnostic message transmission is stopped\r\nstatus 0x%02x\r\n", error);
         sTransmitMode = kDiagTransmitModeIdle;
         otPlatRadioReceive(aInstance, sChannel);
     }
@@ -213,8 +205,9 @@ static otError processTransmit(otInstance *aInstance, uint8_t aArgsLength, char 
         sTxCount      = sTxRequestedCount;
         uint32_t now  = otPlatAlarmMilliGetNow();
         otPlatAlarmMilliStartAt(aInstance, now, sTxPeriod);
-        diagOutput("sending %" PRId32 " diagnostic messages with %" PRIu32 " ms interval\r\nstatus 0x%02x\r\n",
-                   sTxRequestedCount, sTxPeriod, error);
+        snprintf(aOutput, aOutputMaxLen,
+                 "sending %" PRId32 " diagnostic messages with %" PRIu32 " ms interval\r\nstatus 0x%02x\r\n",
+                 sTxRequestedCount, sTxPeriod, error);
     }
     else if (strcmp(aArgs[0], "carrier") == 0)
     {
@@ -224,7 +217,8 @@ static otError processTransmit(otInstance *aInstance, uint8_t aArgsLength, char 
 
         sTransmitMode = kDiagTransmitModeCarrier;
 
-        diagOutput("sending carrier on channel %d with tx power %d\r\nstatus 0x%02x\r\n", sChannel, sTxPower, error);
+        snprintf(aOutput, aOutputMaxLen, "sending carrier on channel %d with tx power %d\r\nstatus 0x%02x\r\n",
+                 sChannel, sTxPower, error);
     }
     else if (strcmp(aArgs[0], "interval") == 0)
     {
@@ -236,7 +230,8 @@ static otError processTransmit(otInstance *aInstance, uint8_t aArgsLength, char 
         otEXPECT(error == OT_ERROR_NONE);
         otEXPECT_ACTION(value > 0, error = OT_ERROR_INVALID_ARGS);
         sTxPeriod = (uint32_t)(value);
-        diagOutput("set diagnostic messages interval to %" PRIu32 " ms\r\nstatus 0x%02x\r\n", sTxPeriod, error);
+        snprintf(aOutput, aOutputMaxLen, "set diagnostic messages interval to %" PRIu32 " ms\r\nstatus 0x%02x\r\n",
+                 sTxPeriod, error);
     }
     else if (strcmp(aArgs[0], "count") == 0)
     {
@@ -248,7 +243,8 @@ static otError processTransmit(otInstance *aInstance, uint8_t aArgsLength, char 
         otEXPECT(error == OT_ERROR_NONE);
         otEXPECT_ACTION((value > 0) || (value == -1), error = OT_ERROR_INVALID_ARGS);
         sTxRequestedCount = (uint32_t)(value);
-        diagOutput("set diagnostic messages count to %" PRId32 "\r\nstatus 0x%02x\r\n", sTxRequestedCount, error);
+        snprintf(aOutput, aOutputMaxLen, "set diagnostic messages count to %" PRId32 "\r\nstatus 0x%02x\r\n",
+                 sTxRequestedCount, error);
     }
     else
     {
@@ -256,11 +252,15 @@ static otError processTransmit(otInstance *aInstance, uint8_t aArgsLength, char 
     }
 
 exit:
-    appendErrorResult(error);
+    appendErrorResult(error, aOutput, aOutputMaxLen);
     return error;
 }
 
-static otError processTemp(otInstance *aInstance, uint8_t aArgsLength, char *aArgs[])
+static otError processTemp(otInstance *aInstance,
+                           uint8_t     aArgsLength,
+                           char       *aArgs[],
+                           char       *aOutput,
+                           size_t      aOutputMaxLen)
 {
     OT_UNUSED_VARIABLE(aInstance);
     OT_UNUSED_VARIABLE(aArgs);
@@ -275,14 +275,18 @@ static otError processTemp(otInstance *aInstance, uint8_t aArgsLength, char *aAr
 
     // Measurement resolution is 0.25 degrees Celsius
     // Convert the temperature measurement to a decimal value, in degrees Celsius
-    diagOutput("%" PRId32 ".%02" PRId32 "\r\n", temperature / 4, 25 * (temperature % 4));
+    snprintf(aOutput, aOutputMaxLen, "%" PRId32 ".%02" PRId32 "\r\n", temperature / 4, 25 * (temperature % 4));
 
 exit:
-    appendErrorResult(error);
+    appendErrorResult(error, aOutput, aOutputMaxLen);
     return error;
 }
 
-static otError processCcaThreshold(otInstance *aInstance, uint8_t aArgsLength, char *aArgs[])
+static otError processCcaThreshold(otInstance *aInstance,
+                                   uint8_t     aArgsLength,
+                                   char       *aArgs[],
+                                   char       *aOutput,
+                                   size_t      aOutputMaxLen)
 {
     OT_UNUSED_VARIABLE(aInstance);
 
@@ -295,7 +299,7 @@ static otError processCcaThreshold(otInstance *aInstance, uint8_t aArgsLength, c
     {
         nrf_802154_cca_cfg_get(&ccaConfig);
 
-        diagOutput("cca threshold: %u\r\n", ccaConfig.ed_threshold);
+        snprintf(aOutput, aOutputMaxLen, "cca threshold: %u\r\n", ccaConfig.ed_threshold);
     }
     else
     {
@@ -309,11 +313,11 @@ static otError processCcaThreshold(otInstance *aInstance, uint8_t aArgsLength, c
         ccaConfig.ed_threshold = (uint8_t)value;
 
         nrf_802154_cca_cfg_set(&ccaConfig);
-        diagOutput("set cca threshold to %u\r\nstatus 0x%02x\r\n", ccaConfig.ed_threshold, error);
+        snprintf(aOutput, aOutputMaxLen, "set cca threshold to %u\r\nstatus 0x%02x\r\n", ccaConfig.ed_threshold, error);
     }
 
 exit:
-    appendErrorResult(error);
+    appendErrorResult(error, aOutput, aOutputMaxLen);
     return error;
 }
 
@@ -323,15 +327,11 @@ const struct PlatformDiagCommand sCommands[] = {{"ccathreshold", &processCcaThre
                                                 {"temp", &processTemp},
                                                 {"transmit", &processTransmit}};
 
-void otPlatDiagSetOutputCallback(otInstance *aInstance, otPlatDiagOutputCallback aCallback, void *aContext)
-{
-    OT_UNUSED_VARIABLE(aInstance);
-
-    sDiagOutputCallback  = aCallback;
-    sDiagCallbackContext = aContext;
-}
-
-otError otPlatDiagProcess(otInstance *aInstance, uint8_t aArgsLength, char *aArgs[])
+otError otPlatDiagProcess(otInstance *aInstance,
+                          uint8_t     aArgsLength,
+                          char       *aArgs[],
+                          char       *aOutput,
+                          size_t      aOutputMaxLen)
 {
     otError error = OT_ERROR_INVALID_COMMAND;
     size_t  i;
@@ -340,7 +340,8 @@ otError otPlatDiagProcess(otInstance *aInstance, uint8_t aArgsLength, char *aArg
     {
         if (strcmp(aArgs[0], sCommands[i].mName) == 0)
         {
-            error = sCommands[i].mCommand(aInstance, aArgsLength - 1, aArgsLength > 1 ? &aArgs[1] : NULL);
+            error = sCommands[i].mCommand(aInstance, aArgsLength - 1, aArgsLength > 1 ? &aArgs[1] : NULL, aOutput,
+                                          aOutputMaxLen);
             break;
         }
     }
