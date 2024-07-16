@@ -124,6 +124,40 @@
 #define SRC_ADDR_OFFSET_SHORT_DST    8                                            ///< Offset of the source address in the Data frame if the destination address is short.
 #define SRC_ADDR_OFFSET_EXTENDED_DST 14                                           ///< Offset of the source address in the Data frame if the destination address is extended.
 
+#define MP_LONG_FRAME_OFFSET         1
+#define MP_LONG_FRAME_MASK           (1 << 3)
+
+#define MP_DEST_ADDR_TYPE_OFFSET     1
+#define MP_DEST_ADDR_TYPE_NONE       0x00
+#define MP_DEST_ADDR_TYPE_SHORT      (2 << 4)
+#define MP_DEST_ADDR_TYPE_EXTENDED   (3 << 4)
+#define MP_DEST_ADDR_TYPE_MASK       (3 << 4)
+
+#define MP_SRC_ADDR_TYPE_OFFSET      1
+#define MP_SRC_ADDR_TYPE_NONE        0x00
+#define MP_SRC_ADDR_TYPE_SHORT       (2 << 6)
+#define MP_SRC_ADDR_TYPE_EXTENDED    (3 << 6)
+#define MP_SRC_ADDR_TYPE_MASK        (3 << 6)
+
+#define MP_DST_PANID_PRESENT_OFFSET  2
+#define MP_DST_PANID_PRESENT_MASK    (1 << 0)
+#define MP_DST_PANID_PRESENT_BIT     (1 << 0)
+
+#define MP_SECURITY_ENABLED_OFFSET   2
+#define MP_SECURITY_ENABLED_BIT      (1 << 1)
+
+#define MP_DSN_SUPPRESS_OFFSET       2
+#define MP_DSN_SUPPRESS_BIT          (1 << 2)
+
+#define MP_FRAME_PENDING_OFFSET      2
+#define MP_FRAME_PENDING_BIT         (1 << 3)
+
+#define MP_ACK_REQUEST_OFFSET        2
+#define MP_ACK_REQUEST_BIT           (1 << 6)
+
+#define MP_IE_PRESENT_OFFSET         2
+#define MP_IE_PRESENT_BIT            (1 << 7)
+
 #define DSN_SIZE                     1                                            ///< Size of the Sequence Number field.
 #define FCF_SIZE                     2                                            ///< Size of the FCF field.
 #define FCS_SIZE                     2                                            ///< Size of the FCS field.

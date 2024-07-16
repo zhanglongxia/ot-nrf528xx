@@ -132,3 +132,14 @@ void otPlatWakeHost(void)
 {
     // TODO: implement an operation to wake the host from sleep state.
 }
+
+void otPlatAssertFail(const char *aFilename, int aLineNumber)
+{
+    OT_UNUSED_VARIABLE(aFilename);
+    OT_UNUSED_VARIABLE(aLineNumber);
+
+    otPlatLog(OT_LOG_LEVEL_CRIT, OT_LOG_REGION_MAC, "ASSERT() %s : %u", aFilename, aLineNumber);
+    while (1)
+    {
+    }
+}
