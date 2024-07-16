@@ -533,7 +533,12 @@ static void channel_set(uint8_t channel)
  */
 static bool ack_is_requested(const uint8_t * p_frame)
 {
-    return nrf_802154_frame_parser_ar_bit_is_set(p_frame);
+    if (nrf_802154_frame_parser_is_mp_frame(p_frame))
+    {
+        return nrf_802154_frame_parser_mp_ar_bit_is_set(p_frame);
+    } else {
+        return nrf_802154_frame_parser_ar_bit_is_set(p_frame);
+   }
 }
 
 /***************************************************************************************************
@@ -1035,6 +1040,9 @@ static void rx_terminate(void)
 {
     uint32_t ints_to_disable = 0;
 
+    nrf_802154_diag_increase_id();
+    m_diag.m_data[m_id][DIAG_TP_TYPE_OFFSET] = DIAG_TP_TYPE_RX_TERMINATE;
+
     nrf_ppi_channel_disable(PPI_DISABLED_EGU);
     nrf_ppi_channel_disable(PPI_EGU_RAMP_UP);
     nrf_ppi_channel_disable(PPI_EGU_TIMER_START);
@@ -1512,6 +1520,9 @@ static void rx_init(bool disabled_was_triggered)
     {
         return;
     }
+
+    nrf_802154_diag_increase_id();
+    m_diag.m_data[m_id][DIAG_TP_TYPE_OFFSET] = DIAG_TP_TYPE_INT;
 
     // Clear filtering flag
     rx_flags_clear();
@@ -2007,11 +2018,22 @@ static void irq_bcmatch_state_rx(void)
         return;
     }
 
+
     if (!m_flags.frame_filtered)
     {
         m_flags.psdu_being_received = true;
         filter_result               = nrf_802154_filter_frame_part(mp_current_rx_buffer->data,
                                                                    &num_data_bytes);
+
+        nrf_802154_diag_increase_id();
+        m_diag.m_data[m_id][DIAG_TP_TYPE_OFFSET] = DIAG_TP_TYPE_BCC_NO_FILTERED;
+        m_diag.m_data[m_id][DIAG_BCC_PRE_OFFSET_0] = prev_num_data_bytes;
+        m_diag.m_data[m_id][DIAG_BCC_NEW_OFFSET_1] = num_data_bytes;
+        m_diag.m_data[m_id][DIAG_FILTER_RESULT_OFFSET_2] = filter_result;
+        m_diag.m_data[m_id][DIAG_IS_MULTIPURPOSE_FRAME] = nrf_802154_frame_parser_is_mp_frame(mp_current_rx_buffer->data);
+        m_diag.m_data[m_id][DIAG_FRAME_DATA_0] = mp_current_rx_buffer->data[0];
+        m_diag.m_data[m_id][DIAG_FRAME_DATA_1] = mp_current_rx_buffer->data[1];
+        m_diag.m_data[m_id][DIAG_FRAME_DATA_2] = mp_current_rx_buffer->data[2];
 
         if (filter_result == NRF_802154_RX_ERROR_NONE)
         {
@@ -2042,6 +2064,11 @@ static void irq_bcmatch_state_rx(void)
         {
             // Promiscuous mode, allow incorrect frames. Nothing to do here.
         }
+    }
+    else
+    {
+        nrf_802154_diag_increase_id();
+        m_diag.m_data[m_id][DIAG_TP_TYPE_OFFSET] = DIAG_TP_TYPE_BCC_FILTERED;
     }
 
     if ((!m_flags.rx_timeslot_requested) && (frame_accepted))
@@ -2733,6 +2760,8 @@ static void irq_handler(void)
         nrf_802154_log(EVENT_TRACE_ENTER, FUNCTION_EVENT_CRCERROR);
         nrf_radio_event_clear(NRF_RADIO_EVENT_CRCERROR);
 
+        nrf_802154_diag_increase_id();
+        m_diag.m_data[m_id][DIAG_TP_TYPE_OFFSET] = DIAG_TP_TYPE_CRC_ERROR;
         switch (m_state)
         {
             case RADIO_STATE_RX:
@@ -2752,6 +2781,9 @@ static void irq_handler(void)
     {
         nrf_802154_log(EVENT_TRACE_ENTER, FUNCTION_EVENT_CRCOK);
         nrf_radio_event_clear(NRF_RADIO_EVENT_CRCOK);
+
+        nrf_802154_diag_increase_id();
+        m_diag.m_data[m_id][DIAG_TP_TYPE_OFFSET] = DIAG_TP_TYPE_CRC_OK;
 
         switch (m_state)
         {

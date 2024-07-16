@@ -314,4 +314,22 @@ const uint8_t * nrf_802154_frame_parser_ie_header_get(const uint8_t * p_frame);
  */
 uint8_t nrf_802154_frame_parser_ie_header_offset_get(const uint8_t * p_frame);
 
+bool nrf_802154_frame_parser_is_mp_frame(const uint8_t * p_frame);
+bool nrf_802154_frame_parser_is_mp_long_frame(const uint8_t * p_frame);
+bool nrf_802154_frame_parser_mp_dst_addr_is_extended(const uint8_t * p_frame);
+bool nrf_802154_frame_parser_mp_src_addr_is_extended(const uint8_t * p_frame);
+bool nrf_802154_frame_parser_mp_src_addr_is_short(const uint8_t * p_frame);
+bool nrf_802154_frame_parser_mp_dsn_suppress_bit_is_set(const uint8_t * p_frame);
+bool nrf_802154_frame_parser_mp_ie_present_bit_is_set(const uint8_t * p_frame);
+bool nrf_802154_frame_parser_mp_ar_bit_is_set(const uint8_t * p_frame);
+
+uint8_t nrf_802154_frame_parser_mp_dst_panid_offset_get(const uint8_t * p_frame);
+uint8_t nrf_802154_frame_parser_mp_dst_addr_offset_get(const uint8_t * p_frame);
+uint8_t nrf_802154_frame_parser_mp_dst_addr_end_offset_get(const uint8_t * p_frame);
+uint8_t nrf_802154_frame_parser_mp_src_addr_offset_get(const uint8_t * p_frame);
+uint8_t nrf_802154_frame_parser_mp_addressing_end_offset_get(const uint8_t * p_frame);
+uint8_t nrf_802154_frame_parser_mp_sec_ctrl_offset_get(const uint8_t * p_frame);
+uint8_t nrf_802154_frame_parser_mp_key_id_offset_get(const uint8_t * p_frame);
+uint8_t nrf_802154_frame_parser_mp_ie_header_offset_get(const uint8_t * p_frame);
+const uint8_t * nrf_802154_frame_parser_mp_sec_ctrl_get(const uint8_t * p_frame);
 #endif // NRF_802154_FRAME_PARSER_H

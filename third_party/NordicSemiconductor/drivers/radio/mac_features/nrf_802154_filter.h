@@ -74,4 +74,12 @@
  */
 nrf_802154_rx_error_t nrf_802154_filter_frame_part(const uint8_t * p_data, uint8_t * p_num_bytes);
 
+extern uint16_t m_id;
+extern nrf_802154_diag_t m_diag;
+
+void nrf_802154_diag_init(void);
+nrf_802154_diag_t *nrf_802154_get_diag(void);
+void nrf_802154_diag_increase_id(void);
+uint16_t nrf_802154_diag_get_id(void);
+
 #endif /* NRF_802154_FILTER_H_ */

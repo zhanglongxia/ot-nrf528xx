@@ -50,6 +50,7 @@
 #include <platform-config.h>
 #include <openthread/platform/alarm-micro.h>
 #include <openthread/platform/diag.h>
+#include <openthread/platform/logging.h>
 #include <openthread/platform/radio.h>
 #include <openthread/platform/time.h>
 
@@ -148,6 +149,35 @@ static bool             sAckedWithSecEnhAck;
 static uint32_t         sAckFrameCounter;
 static uint8_t          sAckKeyId;
 #endif
+
+enum
+{
+    kTxAckNone     = 0,
+    kTxAck         = (1 << 0),
+    kTxAckCslIeSet = (1 << 1),
+};
+
+static int8_t   sTxAckState;
+static uint8_t *sTxAckPsdu;
+static uint8_t  sTxAckPsduLen;
+
+bool           sCslIsSet = false;
+otShortAddress sCslShortAddr;
+otExtAddress   sCslExtAddr;
+
+const char *BinToHex(const uint8_t *aData, uint8_t aLength, char *aBuf, uint16_t aBufLen)
+{
+    char *start = aBuf;
+    char *end   = aBuf + aBufLen;
+
+    for (uint8_t i = 0; i < aLength; i++)
+    {
+        start += snprintf(start, end - start, "%02x ", aData[i]);
+    }
+
+    *start = '\0';
+    return aBuf;
+}
 
 static int8_t GetTransmitPowerForChannel(uint8_t aChannel)
 {
@@ -594,7 +624,8 @@ otRadioCaps otPlatRadioGetCaps(otInstance *aInstance)
 
     return (otRadioCaps)(OT_RADIO_CAPS_ENERGY_SCAN | OT_RADIO_CAPS_ACK_TIMEOUT | OT_RADIO_CAPS_CSMA_BACKOFF |
 #if OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2
-                         OT_RADIO_CAPS_TRANSMIT_SEC | OT_RADIO_CAPS_TRANSMIT_TIMING | OT_RADIO_CAPS_RECEIVE_TIMING |
+                         // OT_RADIO_CAPS_TRANSMIT_SEC | OT_RADIO_CAPS_TRANSMIT_TIMING | OT_RADIO_CAPS_RECEIVE_TIMING |
+                         OT_RADIO_CAPS_TRANSMIT_SEC | OT_RADIO_CAPS_TRANSMIT_TIMING |
 #endif
                          OT_RADIO_CAPS_SLEEP_TO_TX);
 }
@@ -854,6 +885,7 @@ exit:
 void nrf5RadioProcess(otInstance *aInstance)
 {
     bool isEventPending = false;
+    char buf[200];
 
     for (uint32_t i = 0; i < NRF_802154_RX_BUFFERS; i++)
     {
@@ -874,6 +906,27 @@ void nrf5RadioProcess(otInstance *aInstance)
             uint8_t *bufferAddress   = &sReceivedFrames[i].mPsdu[-1];
             sReceivedFrames[i].mPsdu = NULL;
             nrf_802154_buffer_free_raw(bufferAddress);
+
+            if (sCslIsSet)
+            {
+                sCslIsSet = false;
+                otPlatLog(OT_LOG_LEVEL_WARN, OT_LOG_REGION_MAC,
+                          "EnableCsl: CslPeriod:%u, shortAddr:%04x ExtAddr: %02x%02x%02x%02x%02x%02x%02x%02x",
+                          sCslPeriod, sCslShortAddr, sCslExtAddr.m8[0], sCslExtAddr.m8[1], sCslExtAddr.m8[2],
+                          sCslExtAddr.m8[3], sCslExtAddr.m8[4], sCslExtAddr.m8[5], sCslExtAddr.m8[6],
+                          sCslExtAddr.m8[7]);
+            }
+
+            if (sTxAckState != kTxAckNone)
+            {
+                // otPlatLog(OT_LOG_LEVEL_WARN, OT_LOG_REGION_MAC, "TxAck:%02x Len:%u Psdu:%s", sTxAckState,
+                // sTxAckPsduLen,
+                //           BinToHex(sTxAckPsdu, sTxAckPsduLen, buf, sizeof(buf)));
+                otPlatLog(OT_LOG_LEVEL_WARN, OT_LOG_REGION_MAC, "TxAck:%02x Seq=%u Len:%u", sTxAckState, sTxAckPsdu[2],
+                          sTxAckPsduLen);
+                sTxAckState   = kTxAckNone;
+                sTxAckPsduLen = 0;
+            }
         }
     }
 
@@ -1122,6 +1175,7 @@ void nrf_802154_tx_ack_started(uint8_t *p_data, int8_t power, uint8_t lqi)
 
     OT_UNUSED_VARIABLE(ackFrame);
 
+    sTxAckState |= kTxAck;
     ackFrame.mPsdu   = (uint8_t *)(p_data + 1);
     ackFrame.mLength = p_data[0];
 
@@ -1133,6 +1187,7 @@ void nrf_802154_tx_ack_started(uint8_t *p_data, int8_t power, uint8_t lqi)
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     if (sCslPeriod > 0)
     {
+        sTxAckState |= kTxAckCslIeSet;
         otMacFrameSetCslIe(&ackFrame, sCslPeriod, getCslPhase());
     }
 #endif
@@ -1144,6 +1199,9 @@ void nrf_802154_tx_ack_started(uint8_t *p_data, int8_t power, uint8_t lqi)
         otMacFrameSetEnhAckProbingIe(&ackFrame, linkMetricsData, linkMetricsDataLen);
     }
 #endif
+
+    sTxAckPsdu    = ackFrame.mPsdu;
+    sTxAckPsduLen = ackFrame.mLength;
 
     txAckProcessSecurity(p_data);
 #endif
@@ -1397,7 +1455,16 @@ otError otPlatRadioEnableCsl(otInstance         *aInstance,
 {
     sCslPeriod = aCslPeriod;
 
+    //    otPlatLog(OT_LOG_LEVEL_WARN, OT_LOG_REGION_MAC,
+    //              "EnableCsl:%02x CslPeriod:%u, shortAddr:%04x ExtAddr: %02x%02x%02x%02x%02x%02x%02x%02x", aCslPeriod,
+    //              aShortAddr, aExtAddr->m8[0], aExtAddr->m8[1], aExtAddr->m8[2], aExtAddr->m8[3], aExtAddr->m8[4],
+    //              aExtAddr->m8[5], aExtAddr->m8[6], aExtAddr->m8[7]);
+
     updateIeData(aInstance, aShortAddr, aExtAddr);
+
+    sCslIsSet     = true;
+    sCslShortAddr = aShortAddr;
+    memcpy(&sCslExtAddr, aExtAddr, sizeof(otExtAddress));
 
     return OT_ERROR_NONE;
 }
