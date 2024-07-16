@@ -161,6 +161,39 @@ typedef uint8_t nrf_802154_src_addr_match_t;
 
 #define NRF_802154_RSSI_INVALID INT8_MAX
 
+
+#define DIAG_MAX_ID     40
+#define DIAG_MAX_OFFSET 8
+
+
+#define DIAG_TP_TYPE_OFFSET         0
+#define DIAG_BCC_PRE_OFFSET_0       1
+#define DIAG_BCC_NEW_OFFSET_1       2
+#define DIAG_FILTER_RESULT_OFFSET_2 3
+#define DIAG_IS_MULTIPURPOSE_FRAME  4
+#define DIAG_FRAME_DATA_0           5
+#define DIAG_FRAME_DATA_1           6
+#define DIAG_FRAME_DATA_2           7
+
+#define DIAG_DST_ADDR_END_OFFSET    1
+
+#define DIAG_FRAME_TYPE_OFFSET       1
+#define DIAG_FRAME_VERSION_OFFSET    2
+
+#define DIAG_TP_TYPE_INT             1
+#define DIAG_TP_TYPE_BCC_NO_FILTERED 2
+#define DIAG_TP_TYPE_BCC_FILTERED    3
+#define DIAG_TP_TYPE_CRC_OK          4
+#define DIAG_TP_TYPE_CRC_ERROR       5
+#define DIAG_TP_TYPE_RX_TERMINATE    6
+#define DIAG_TP_TYPE_MP_ADDR_OFFSET  7
+#define DIAG_TP_TYPE_FRAME_TYPE_VERSION   8
+
+typedef struct
+{
+   uint8_t m_data[DIAG_MAX_ID + 1][DIAG_MAX_OFFSET + 1];
+} nrf_802154_diag_t;
+
 /**
  *@}
  **/

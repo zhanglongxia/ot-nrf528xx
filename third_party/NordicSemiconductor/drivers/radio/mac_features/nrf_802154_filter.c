@@ -53,6 +53,26 @@
 #define SHORT_ADDR_CHECK_OFFSET    (DEST_ADDR_OFFSET + SHORT_ADDRESS_SIZE)
 #define EXTENDED_ADDR_CHECK_OFFSET (DEST_ADDR_OFFSET + EXTENDED_ADDRESS_SIZE)
 
+uint16_t m_id = 0;
+nrf_802154_diag_t m_diag;
+
+void nrf_802154_diag_init(void)
+{
+    m_id = 0;
+    memset(&m_diag, 0, sizeof(m_diag));
+}
+
+nrf_802154_diag_t *nrf_802154_get_diag(void)
+{
+    return &m_diag;
+}
+
+void nrf_802154_diag_increase_id(void) {
+    m_id = m_id >= DIAG_MAX_ID? DIAG_MAX_ID: m_id + 1;
+}
+
+uint16_t nrf_802154_diag_get_id(void) { return m_id; }
+
 /**
  * @brief Check if given frame version is allowed for given frame type.
  *
@@ -150,6 +170,31 @@ static nrf_802154_rx_error_t dst_addressing_end_offset_get_2006(const uint8_t * 
                                                                 uint8_t         frame_type)
 {
     nrf_802154_rx_error_t result;
+
+    if (frame_type == FRAME_TYPE_MULTIPURPOSE)
+    {
+        if (nrf_802154_frame_parser_is_mp_long_frame(p_data))
+        {
+            uint8_t end_offset = nrf_802154_frame_parser_mp_dst_addr_end_offset_get(p_data);
+
+            if (end_offset == NRF_802154_FRAME_PARSER_INVALID_OFFSET)
+            {
+                result = NRF_802154_RX_ERROR_INVALID_FRAME;
+            }
+            else
+            {
+                *p_num_bytes = end_offset;
+                result       = NRF_802154_RX_ERROR_NONE;
+            }
+        }
+        else
+        {
+            // Do not process short multipurpose frame.
+            result = NRF_802154_RX_ERROR_INVALID_FRAME;
+        }
+
+        return result;
+    }
 
     switch (p_data[DEST_ADDR_TYPE_OFFSET] & DEST_ADDR_TYPE_MASK)
     {
@@ -442,6 +487,11 @@ nrf_802154_rx_error_t nrf_802154_filter_frame_part(const uint8_t * p_data, uint8
     nrf_802154_rx_error_t result        = NRF_802154_RX_ERROR_INVALID_FRAME;
     uint8_t               frame_type    = p_data[FRAME_TYPE_OFFSET] & FRAME_TYPE_MASK;
     uint8_t               frame_version = p_data[FRAME_VERSION_OFFSET] & FRAME_VERSION_MASK;
+
+    nrf_802154_diag_increase_id();
+    m_diag.m_data[m_id][DIAG_TP_TYPE_OFFSET] = DIAG_TP_TYPE_FRAME_TYPE_VERSION;
+    m_diag.m_data[m_id][DIAG_FRAME_TYPE_OFFSET] = frame_type;
+    m_diag.m_data[m_id][DIAG_FRAME_VERSION_OFFSET] = frame_version;
 
     switch (*p_num_bytes)
     {
