@@ -72,6 +72,39 @@
  * @retval NRF_802154_RX_ERROR_INVALID_DEST_ADDR  Incoming frame has destination address that
  *                                                mismatches the address of this node.
  */
-nrf_802154_rx_error_t nrf_802154_filter_frame_part(const uint8_t * p_data, uint8_t * p_num_bytes);
+nrf_802154_rx_error_t nrf_802154_filter_frame_part(const uint8_t *p_data, uint8_t *p_num_bytes);
 
+#define LOG_TYPE_RX    0
+#define LOG_TYPE_RX_AT 1
+
+#define LOG_TP1 1
+#define LOG_TP2 2
+#define LOG_TP3 3
+#define LOG_TP4 4
+#define LOG_TP5 5
+
+typedef struct nrf_log
+{
+    uint8_t m_log_type;
+    uint8_t m_is_mp;
+
+    uint8_t m_dst_ext_addr_check;
+    uint8_t m_dst_ext_addr[8];
+    uint8_t m_local_ext_addr[8];
+    uint8_t m_dst_addr_offset;
+
+    uint8_t m_dst_panid_check;
+    uint8_t m_dst_panid[2];
+    uint8_t m_local_panid[2];
+    uint8_t m_dst_panid_offset;
+
+    uint8_t m_psdu_len;
+    uint8_t m_psdu[128];
+    uint8_t m_num_core_logs;
+    uint8_t m_core_logs[20];
+} nrf_log_t;
+
+extern nrf_log_t g_nrf_log;
+
+void nrf_802154_log_init(void);
 #endif /* NRF_802154_FILTER_H_ */

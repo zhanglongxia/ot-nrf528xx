@@ -236,6 +236,11 @@ static volatile bool m_rsch_timeslot_is_granted; ///< State of the RSCH timeslot
 /***************************************************************************************************
  * @section Common core operations
  **************************************************************************************************/
+nrf_log_callback_t m_log_callback =NULL;
+
+void nrf_802154_core_set_log_callback(nrf_log_callback_t p_callback) {
+    m_log_callback = p_callback;
+}
 
 /** Set driver state.
  *
@@ -1990,6 +1995,7 @@ static void irq_address_state_rx_ack(void)
     nrf_802154_core_hooks_rx_ack_started();
 }
 
+
 #if !NRF_802154_DISABLE_BCC_MATCHING
 // This event is generated during frame reception to request Radio Scheduler timeslot
 // and to filter frame
@@ -2003,6 +2009,7 @@ static void irq_bcmatch_state_rx(void)
     num_data_bytes      = nrf_radio_bcc_get() / 8;
     prev_num_data_bytes = num_data_bytes;
 
+    g_nrf_log.m_log_type = LOG_TYPE_RX;
     assert(num_data_bytes >= PHR_SIZE + FCF_SIZE);
 
     // If CRCERROR event is set, it means that events are handled out of order due to software
@@ -2033,6 +2040,12 @@ static void irq_bcmatch_state_rx(void)
         else if ((filter_result == NRF_802154_RX_ERROR_INVALID_LENGTH) ||
                  (!nrf_802154_pib_promiscuous_get()))
         {
+            g_nrf_log.m_psdu_len = num_data_bytes;
+            memcpy(g_nrf_log.m_psdu, mp_current_rx_buffer->data,num_data_bytes);
+            if (m_log_callback != NULL)
+            {
+                m_log_callback(&g_nrf_log);
+            }
             rx_terminate();
             rx_init(true);
 
@@ -2962,6 +2975,9 @@ bool nrf_802154_core_receive(nrf_802154_term_t              term_lvl,
 {
     bool result = nrf_802154_critical_section_enter();
 
+    g_nrf_log.m_log_type = LOG_TYPE_RX_AT;
+    g_nrf_log.m_num_core_logs = 0;
+
     if (result)
     {
         if ((m_state != RADIO_STATE_RX) && (m_state != RADIO_STATE_TX_ACK))
@@ -2972,12 +2988,16 @@ bool nrf_802154_core_receive(nrf_802154_term_t              term_lvl,
 
                 if (result)
                 {
+                    g_nrf_log.m_core_logs[g_nrf_log.m_num_core_logs++] = LOG_TP1;
                     state_set(RADIO_STATE_RX);
                     rx_init(true);
+                } else {
+                    g_nrf_log.m_core_logs[g_nrf_log.m_num_core_logs++] = LOG_TP2;
                 }
             }
             else
             {
+                g_nrf_log.m_core_logs[g_nrf_log.m_num_core_logs++] = LOG_TP3;
                 result = false;
             }
         }
@@ -2993,10 +3013,17 @@ bool nrf_802154_core_receive(nrf_802154_term_t              term_lvl,
     {
         if (notify_function != NULL)
         {
+            g_nrf_log.m_core_logs[g_nrf_log.m_num_core_logs++] = LOG_TP4;
             notify_function(false);
+        } else {
+            g_nrf_log.m_core_logs[g_nrf_log.m_num_core_logs++] = LOG_TP5;
         }
     }
 
+    if (m_log_callback != NULL)
+    {
+        m_log_callback(&g_nrf_log);
+    }
     return result;
 }
 

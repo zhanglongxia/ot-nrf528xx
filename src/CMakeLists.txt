@@ -39,7 +39,7 @@ else()
     endif()
 endif()
 
-set(NRF_COMM_SOURCES
+set(NRF_COMM_SOURCES                     
     src/alarm.c
     src/crypto.c
     src/diag.c

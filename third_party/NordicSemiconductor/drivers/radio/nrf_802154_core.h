@@ -43,6 +43,7 @@
 #include "nrf_802154_notification.h"
 #include "nrf_802154_rx_buffer.h"
 #include "nrf_802154_types.h"
+#include "nrf_802154_filter.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -232,6 +233,10 @@ bool nrf_802154_core_last_rssi_measurement_get(int8_t * p_rssi);
  */
 void nrf_802154_core_irq_handler(void);
 #endif // !NRF_802154_INTERNAL_IRQ_HANDLING
+
+typedef void (*nrf_log_callback_t)(nrf_log_t *p_nrf_log);
+
+void nrf_802154_core_set_log_callback(nrf_log_callback_t p_callback);
 
 #ifdef __cplusplus
 }

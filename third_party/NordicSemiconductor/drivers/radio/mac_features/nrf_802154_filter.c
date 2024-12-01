@@ -53,6 +53,12 @@
 #define SHORT_ADDR_CHECK_OFFSET    (DEST_ADDR_OFFSET + SHORT_ADDRESS_SIZE)
 #define EXTENDED_ADDR_CHECK_OFFSET (DEST_ADDR_OFFSET + EXTENDED_ADDRESS_SIZE)
 
+nrf_log_t g_nrf_log;
+
+void nrf_802154_log_init(void) {
+    memset(&g_nrf_log, sizeof(g_nrf_log), 0);
+}
+
 /**
  * @brief Check if given frame version is allowed for given frame type.
  *
@@ -431,6 +437,10 @@ static nrf_802154_rx_error_t dst_addr_check(const uint8_t * p_data, uint8_t fram
     {
         if (!dst_pan_id_check(mhr_data.p_dst_panid, frame_type))
         {
+            g_nrf_log.m_dst_panid_check = 1;
+            memcpy(g_nrf_log.m_dst_panid, mhr_data.p_dst_panid, 2);
+            memcpy(g_nrf_log.m_local_panid, nrf_802154_pib_pan_id_get(), 2);
+
             return NRF_802154_RX_ERROR_INVALID_DEST_ADDR;
         }
     }
@@ -443,6 +453,9 @@ static nrf_802154_rx_error_t dst_addr_check(const uint8_t * p_data, uint8_t fram
                    NRF_802154_RX_ERROR_INVALID_DEST_ADDR;
 
         case EXTENDED_ADDRESS_SIZE:
+            g_nrf_log.m_dst_ext_addr_check = 1;
+            memcpy(g_nrf_log.m_dst_ext_addr, mhr_data.p_dst_addr, 8);
+            memcpy(g_nrf_log.m_local_ext_addr, nrf_802154_pib_extended_address_get(), 8);
             return dst_extended_addr_check(mhr_data.p_dst_addr,
                                            frame_type) ? NRF_802154_RX_ERROR_NONE :
                    NRF_802154_RX_ERROR_INVALID_DEST_ADDR;

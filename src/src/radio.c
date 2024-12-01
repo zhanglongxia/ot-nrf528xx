@@ -60,6 +60,7 @@
 #include <nrf.h>
 #include <nrf_802154.h>
 #include <nrf_802154_pib.h>
+#include <nrf_802154_core.h>
 
 #include <openthread-core-config.h>
 #include <openthread/config.h>
@@ -75,7 +76,7 @@
 #define FRAME_PENDING_OFFSET     1         ///< Byte containing pending bit (+1 for frame length byte).
 #define FRAME_PENDING_BIT        (1 << 4)  ///< Frame Pending bit.
 #define SECURITY_ENABLED_OFFSET  1         ///< Byte containing security enabled bit (+1 for frame length byte).
-#define SECURITY_ENABLED_BIT     (1 << 3)  ///< Security enabled bit.
+//#define SECURITY_ENABLED_BIT     (1 << 3)  ///< Security enabled bit.
 
 #define RSSI_SETTLE_TIME_US   40           ///< RSSI settle time in microseconds.
 #define SAFE_DELTA            1000         ///< A safe value for the `dt` parameter of delayed operations.
@@ -166,6 +167,54 @@ static int8_t GetTransmitPowerForChannel(uint8_t aChannel)
     return power;
 }
 
+void nrf_log_callback(nrf_log_t *p_nrf_log)
+{
+    char buf[100] = {0};
+    char *start = buf;
+    char *end = buf + sizeof(buf);
+    uint8_t len = p_nrf_log->m_psdu_len > 30? 30: p_nrf_log->m_psdu_len;
+    uint8_t i;
+    uint8_t *a;
+    uint8_t *b;
+
+    if (p_nrf_log->m_log_type == LOG_TYPE_RX)
+    {
+        if (p_nrf_log->m_dst_ext_addr_check)
+        {
+            a = p_nrf_log->m_dst_ext_addr;
+            b = p_nrf_log->m_local_ext_addr;
+            otPlatLog(OT_LOG_LEVEL_CRIT, OT_LOG_REGION_MAC, "addr[oft:%u,dst:%02x%02x%02x%02x,local:%02x%02x%02x%02x]",
+                      p_nrf_log->m_dst_addr_offset, a[0], a[1], a[2], a[3], b[0],b[1], b[2],b[3]);
+        }
+        
+        if (p_nrf_log->m_dst_panid_check)
+        {
+            a = p_nrf_log->m_dst_panid;
+            b = p_nrf_log->m_local_panid;
+            otPlatLog(OT_LOG_LEVEL_CRIT, OT_LOG_REGION_MAC, "panid[oft:%u,dst:%02x%02x,local:%02x%02x]",
+                      p_nrf_log->m_dst_panid_offset, a[0], a[1], b[0],b[1]);
+        }
+        
+        for (i = 0; i < len; i++)
+        {
+            start += snprintf(start, end - start, "%02x ", p_nrf_log->m_psdu[i]);
+        }
+        
+        otPlatLog(OT_LOG_LEVEL_CRIT, OT_LOG_REGION_MAC, "mp:%u, frame:%s", p_nrf_log->m_is_mp ,buf);
+    } 
+    else if (p_nrf_log->m_log_type == LOG_TYPE_RX_AT)
+    {
+        for (i = 0; i < p_nrf_log->m_num_core_logs; i++)
+        {
+            start += snprintf(start, end - start, "TP%u, ", p_nrf_log->m_core_logs[i]);
+        }
+        otPlatLog(OT_LOG_LEVEL_CRIT, OT_LOG_REGION_MAC, "RxAt: %s", buf);
+    }
+
+    memset(p_nrf_log, sizeof(*p_nrf_log), 0);
+      
+}     
+      
 static void dataInit(void)
 {
     sDisabled = true;
@@ -189,6 +238,8 @@ static void dataInit(void)
     }
 
     memset(&sAckFrame, 0, sizeof(sAckFrame));
+
+    nrf_802154_core_set_log_callback(nrf_log_callback);
 }
 
 static void convertShortAddress(uint8_t *aTo, uint16_t aFrom)
@@ -594,8 +645,8 @@ otRadioCaps otPlatRadioGetCaps(otInstance *aInstance)
 
     return (otRadioCaps)(OT_RADIO_CAPS_ENERGY_SCAN | OT_RADIO_CAPS_ACK_TIMEOUT | OT_RADIO_CAPS_CSMA_BACKOFF |
 #if OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2
-                         // OT_RADIO_CAPS_TRANSMIT_SEC | OT_RADIO_CAPS_TRANSMIT_TIMING | OT_RADIO_CAPS_RECEIVE_TIMING |
-                         OT_RADIO_CAPS_TRANSMIT_SEC | OT_RADIO_CAPS_TRANSMIT_TIMING |
+                         OT_RADIO_CAPS_TRANSMIT_SEC | OT_RADIO_CAPS_TRANSMIT_TIMING | OT_RADIO_CAPS_RECEIVE_TIMING |
+                         // OT_RADIO_CAPS_TRANSMIT_SEC | OT_RADIO_CAPS_TRANSMIT_TIMING |
 #endif
                          OT_RADIO_CAPS_SLEEP_TO_TX);
 }

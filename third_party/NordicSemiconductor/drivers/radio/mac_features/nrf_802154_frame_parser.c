@@ -43,6 +43,7 @@
 #include <stdlib.h>
 
 #include "nrf_802154_const.h"
+#include "nrf_802154_filter.h"
 
 /***************************************************************************************************
  * @section Helper functions
@@ -349,8 +350,7 @@ static bool is_mp_frame(const uint8_t * p_frame)
 
 static uint8_t mp_addressing_offset_get(const uint8_t * p_frame)
 {
-    if ((frame_version_get(p_frame) >= FRAME_VERSION_2) &&
-        nrf_802154_frame_parser_dsn_suppress_bit_is_set(p_frame))
+    if (nrf_802154_frame_parser_dsn_suppress_bit_is_set(p_frame))
     {
         return PHR_SIZE + FCF_SIZE;
     }
@@ -692,8 +692,10 @@ static bool nrf_802154_frame_parser_mp_mhr_parse(const uint8_t                  
     uint8_t offset               = mp_addressing_offset_get(p_frame);
     bool    is_dst_panid_present = mp_dst_panid_is_present(p_frame);
 
+    g_nrf_log.m_is_mp= 1;
     if (is_dst_panid_present)
     {
+        g_nrf_log.m_dst_panid_offset = offset;
         p_fields->p_dst_panid = &p_frame[offset];
         offset               += PAN_ID_SIZE;
     }
@@ -704,6 +706,7 @@ static bool nrf_802154_frame_parser_mp_mhr_parse(const uint8_t                  
 
     if (mp_dst_addr_is_present(p_frame))
     {
+        g_nrf_log.m_dst_addr_offset = offset;
         p_fields->p_dst_addr    = &p_frame[offset];
         p_fields->dst_addr_size = mp_dst_addr_size_get(p_frame);
         offset                 += (p_fields->dst_addr_size);
