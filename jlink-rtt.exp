@@ -1,0 +1,64 @@
+#!/usr/bin/expect -f
+#
+# Starts the jLink server and the jLink RTT.
+#
+# Usage:
+#     ./jlink-rtt.exp <serial_number> [telnet_port]
+#
+# Example:
+#     ./jlink-rtt.exp 683688378 19022
+#
+
+set SPAWN_SERVER_ID 1
+set SPAWN_RTT_ID 2
+
+proc spawn_jlink_server {serial port} {
+    global spawn_id
+    global spawn_ids
+
+    spawn  JLinkExe -device NRF52840_XXAA -if SWD -speed 4000 -autoconnect 1 -SelectEmuBySN $serial -RTTTelnetPort $port
+    expect "J-Link>"
+
+    send "exec SetRTTSearchRanges 0x20010000 0x10000\r\n"
+    expect "J-Link>"
+   
+    set spawn_ids($::SPAWN_SERVER_ID) $spawn_id
+
+    return $spawn_id
+}
+
+proc spawn_jlink_rtt {port} {
+    global spawn_id
+    global spawn_ids
+
+    set id 2
+
+    spawn JLinkRTTClient -RTTTelnetPort $port
+    expect "Process: JLinkExe"
+
+    set spawn_ids($::SPAWN_RTT_ID) $spawn_id
+
+    return $spawn_id
+}
+
+proc start_rtt {serial port} {
+    send_user "Start jLink Server: serial=$serial port=$port\n"
+    spawn_jlink_server $serial $port
+
+    send_user "Start jLink RTT:\n"
+    spawn_jlink_rtt $port
+}
+
+#------------------------------------------------------------------------
+
+set serial [lindex $argv 0]
+
+if { $argc == 2 } {
+    set port [lindex $argv 1]
+} else {
+    set port 19021
+}
+
+start_rtt $serial $port
+
+interact

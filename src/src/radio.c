@@ -50,6 +50,7 @@
 #include <platform-config.h>
 #include <openthread/platform/alarm-micro.h>
 #include <openthread/platform/diag.h>
+#include <openthread/platform/provisional/radio.h>
 #include <openthread/platform/radio.h>
 #include <openthread/platform/time.h>
 
@@ -57,6 +58,7 @@
 #include "platform-fem.h"
 #include "platform-nrf5.h"
 
+#include <mac_features/ack_generator/nrf_802154_ack_data.h>
 #include <nrf.h>
 #include <nrf_802154.h>
 #include <nrf_802154_pib.h>
@@ -124,6 +126,12 @@ static uint32_t      sCslPeriod;
 static uint32_t      sCslSampleTime;
 static const uint8_t sCslIeHeader[OT_IE_HEADER_SIZE] = {CSL_IE_HEADER_BYTES_LO, CSL_IE_HEADER_BYTES_HI};
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+
+#if OPENTHREAD_CONFIG_MAC_ECSL_RECEIVER_ENABLE
+static uint32_t      sECslPeriod;
+static uint32_t      sECslSampleTime;
+static const uint8_t sECslIeHeader[OT_IE_HEADER_SIZE] = {CSL_IE_HEADER_BYTES_LO, CSL_IE_HEADER_BYTES_HI};
+#endif
 
 typedef enum
 {
@@ -200,7 +208,8 @@ static void convertShortAddress(uint8_t *aTo, uint16_t aFrom)
     aTo[1] = (uint8_t)(aFrom >> 8);
 }
 
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MLE_LINK_METRICS_SUBJECT_ENABLE
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MLE_LINK_METRICS_SUBJECT_ENABLE || \
+    OPENTHREAD_CONFIG_MAC_ECSL_RECEIVER_ENABLE
 static void convertExtAddress(uint8_t *aTo, const otExtAddress *aFrom)
 {
     for (uint8_t i = 0; i < sizeof(otExtAddress); i++)
@@ -1062,6 +1071,21 @@ static uint16_t getCslPhase()
 }
 #endif
 
+#if OPENTHREAD_CONFIG_MAC_ECSL_RECEIVER_ENABLE
+static void computeRamPhaseAndBits(uint16_t *aRamPhase, uint16_t *aECslPhase)
+{
+    uint32_t radioTime = otPlatAlarmMicroGetNow();
+    uint32_t delay;
+    uint32_t phase;
+
+    delay = sECslSampleTime - radioTime;
+
+    phase       = delay % (sECslPeriod * OT_RADIO_ECSL_SLOT_SIZE);
+    *aRamPhase  = phase % OT_RADIO_ECSL_SLOT_SIZE;
+    *aECslPhase = phase / OT_RADIO_ECSL_SLOT_SIZE;
+}
+#endif
+
 void nrf_802154_tx_ack_started(uint8_t *p_data, int8_t power, uint8_t lqi)
 {
     otRadioFrame ackFrame;
@@ -1088,6 +1112,17 @@ void nrf_802154_tx_ack_started(uint8_t *p_data, int8_t power, uint8_t lqi)
     if (sCslPeriod > 0)
     {
         otMacFrameSetCslIe(&ackFrame, sCslPeriod, getCslPhase());
+    }
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_ECSL_RECEIVER_ENABLE
+    if (sECslPeriod > 0)
+    {
+        uint16_t ramPhase  = 0;
+        uint16_t eCslPhase = 0;
+
+        computeRamPhaseAndBits(&ramPhase, &eCslPhase);
+        otMacFrameSetScaIe(&ackFrame, ramPhase, 0 /* mNumBits */, 0 /* mRamBits */, eCslPhase, sECslPeriod);
     }
 #endif
 
@@ -1180,6 +1215,17 @@ void nrf_802154_tx_started(const uint8_t *aFrame)
     if ((sCslPeriod > 0) && !sTransmitFrame.mInfo.mTxInfo.mIsARetx)
     {
         otMacFrameSetCslIe(&sTransmitFrame, (uint16_t)sCslPeriod, getCslPhase());
+    }
+#endif
+
+#if OPENTHREAD_CONFIG_MAC_ECSL_RECEIVER_ENABLE
+    if ((sECslPeriod > 0) && !sTransmitFrame.mInfo.mTxInfo.mIsARetx)
+    {
+        uint16_t ramPhase  = 0;
+        uint16_t eCslPhase = 0;
+
+        computeRamPhaseAndBits(&ramPhase, &eCslPhase);
+        otMacFrameSetScaIe(&sTransmitFrame, ramPhase, 0 /* mNumBits */, 0 /* mRamBits */, eCslPhase, sECslPeriod);
     }
 #endif
 
@@ -1459,3 +1505,64 @@ OT_TOOL_WEAK void nrf5HandleRegionChanged(uint16_t aRegionCode)
 {
     OT_UNUSED_VARIABLE(aRegionCode);
 }
+
+#if OPENTHREAD_CONFIG_MAC_ECSL_RECEIVER_ENABLE
+otError otPlatRadioSetEnhancedCslPeriod(otInstance *aInstance, uint32_t aCslPeriod)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+
+    sECslPeriod = aCslPeriod;
+
+    if (aCslPeriod == 0)
+    {
+        nrf_802154_ack_data_init();
+    }
+
+    return OT_ERROR_NONE;
+}
+
+void otPlatRadioSetEnhancedCslSampleTime(otInstance *aInstance, uint32_t aCslSampleTime)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    sECslSampleTime = aCslSampleTime;
+}
+
+otError otPlatRadioAddEnhancedCslPeerAddress(otInstance *aInstance, const otExtAddress *aExtAddr)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+
+    int8_t  offset = 0;
+    uint8_t ackIeData[OT_ACK_IE_MAX_SIZE];
+    uint8_t extAddr[OT_EXT_ADDRESS_SIZE];
+
+    otEXPECT(sECslPeriod > 0);
+
+    offset += otMacFrameGenerateScaIeTemplate(ackIeData + offset);
+    convertExtAddress(extAddr, aExtAddr);
+    nrf_802154_ack_data_set(extAddr, true, ackIeData, offset, NRF_802154_ACK_DATA_IE);
+
+exit:
+    return OT_ERROR_NONE;
+}
+
+otError otPlatRadioClearEnhancedCslPeerAddress(otInstance *aInstance, const otExtAddress *aExtAddr)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+
+    uint8_t extAddr[OT_EXT_ADDRESS_SIZE];
+
+    convertExtAddress(extAddr, aExtAddr);
+    nrf_802154_ack_data_clear(extAddr, true, NRF_802154_ACK_DATA_IE);
+
+    return OT_ERROR_NONE;
+}
+
+otError otPlatRadioClearEnhancedCslPeerAddresses(otInstance *aInstance)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+
+    nrf_802154_ack_data_init();
+
+    return OT_ERROR_NONE;
+}
+#endif

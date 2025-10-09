@@ -1,0 +1,140 @@
+#!/usr/bin/expect -f
+#
+# Test topology:
+#
+# WC (FED) <---------> WED (SSED)
+#
+
+log_file test.log
+
+source "_common.exp"
+
+set dataset "0e08000000000001000035060004001fffe00c0402a0f7f8000300000b0208000db800000000000708fd000db800000000051000112233445566778899aabbccddeeff030f4f70656e5468726561642d666163650102face0410c23a76e98f1a6483639b1ac1271e2e274a0300000b"
+
+set WC 1
+set WED 2
+set wc_ext_address "deadbeefcafe0001"
+set wed_ext_address "deadbeefcafe0002"
+set WAKEUP_ID "0xdeadbeefcafe"
+
+#-----------------------------SSED-------------------------------------
+send_user "\n\n>>> setup WED\n"
+spawn_node $WED "serial" "/dev/ttyACM0"
+
+send "txpower\n"
+expect_line "Done"
+
+send "dataset init tlvs $dataset\n"
+expect_line "Done"
+send "dataset commit active\n"
+expect_line "Done"
+
+send "mode -\n"
+expect_line "Done"
+
+send "childsupervision checktimeout 20\n"
+expect "Done"
+
+send "childsupervision interval 10\n"
+expect "Done"
+
+send "pollperiod 200000\n "
+expect "Done"
+
+#send "ecsl period 40000\n"
+send "ecsl period 800000\n"
+expect_line "Done"
+
+#send "csl timeout 10\n"
+#expect_line "Done"
+
+send "extaddr $wed_ext_address\n"
+expect_line "Done"
+
+send "wakeup channel 12\n"
+expect_line "Done"
+
+send "wakeup wakeupid add $WAKEUP_ID\n"
+expect_line "Done"
+
+send "ifconfig up\n"
+expect_line "Done"
+
+#send "thread start\n"
+#expect_line "Done"
+
+send "ipaddr\n"
+expect_line "Done"
+
+send "wakeup listen enable\n"
+expect_line "Done"
+
+set wed_link_local_addr [get_ipaddr linklocal]
+
+send "srp client host name wed\n"
+expect_line "Done"
+
+send "srp client host address $wed_link_local_addr\n"
+expect_line "Done"
+
+send "srp client service add ins1 _matter._tcp 5540\n"
+expect_line "Done"
+
+send "srp client autostart enable\n"
+expect_line "Done"
+
+
+
+#sleep 2000
+
+#-----------------------------WC-------------------------------------
+send_user "\n\n>>> Setup WC\n"
+
+spawn_node $WC "adb"
+
+send "dataset init tlvs $dataset\n"
+expect_line "Done"
+send "dataset commit active\n"
+expect_line "Done"
+
+send "mode rdn\n"
+expect_line "Done"
+
+send "extaddr $wc_ext_address\n"
+expect_line "Done"
+
+send "routerupgradethreshold 0\n"
+expect_line "Done"
+
+send "wakeup channel 12\n"
+expect_line "Done"
+
+send "srp server faststart enable\n"
+expect_line "Done"
+
+send "ifconfig up\n"
+expect_line "Done"
+
+#send "thread start\n"
+#expect_line "Done"
+
+set wc_link_local_addr [get_ipaddr linklocal]
+
+send_user "\n\n>>> WC establishs a P2P link with WED\n"
+
+sleep 2
+sleep 2
+
+send "p2p link -i $WAKEUP_ID\n"
+expect_line "Done"
+
+send "channel\n"
+expect_line "Done"
+
+sleep 0.4
+
+send "ping $wed_link_local_addr 20 5\n"
+expect_line "Done"
+
+sleep 2
+
